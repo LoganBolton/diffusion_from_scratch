@@ -113,6 +113,7 @@ class SelfAttention(nn.Module):
 class UNet(nn.Module):
     def __init__(self, t_dim=256):
         super().__init__()
+        self.t_embed = TimestepEmbed()
         # Image in: 3 channels -> 128 channels
         self.input_conv = nn.Conv2d(3, 128, kernel_size=3, padding=1)
         
@@ -131,7 +132,7 @@ class UNet(nn.Module):
         self.attn1 = SelfAttention(512)
         self.encode_res6 = ResBlock(512, 512, t_dim)
         self.attn2 = SelfAttention(512)
-        self.down4 = nn.Conv2d(512, 512, kernel_size=2, stride=2)
+        self.down3 = nn.Conv2d(512, 512, kernel_size=2, stride=2)
 
         # Bottleneck: 8x8, 512ch 
         self.bottleneck_res1 = ResBlock(512, 512, t_dim)
@@ -139,29 +140,68 @@ class UNet(nn.Module):
         self.bottleneck_res2 = ResBlock(512, 512, t_dim)
         
         # Decoder level 2: 8x8 -> 16x16, 512ch
-        self.up3 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
-        self.decode_res6 = ResBlock(1024, 512, t_dim)
-        self.decode_attn2 = SelfAttention(512)
-        self.decode_res5 = ResBlock(512, 512, t_dim)
+        self.up1 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
+        self.decode_res1 = ResBlock(1024, 512, t_dim)
         self.decode_attn1 = SelfAttention(512)
+        self.decode_res2 = ResBlock(512, 512, t_dim)
+        self.decode_attn2 = SelfAttention(512)
 
         # Decoder level 1: 16x16 -> 32x32, 256ch
         self.up2 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
-
-        self.decode_res4 = ResBlock(768, 256, t_dim)
-        self.decode_res3 = ResBlock(256, 256, t_dim)
+        self.decode_res3 = ResBlock(768, 256, t_dim)
+        self.decode_res4 = ResBlock(256, 256, t_dim)
 
         # Decoder level 0: 32x32 -> 64x64, 128ch
-        self.up1 = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2)
-        self.decode_res2 = ResBlock(384, 128, t_dim)
-        self.decode_res1 = ResBlock(128, 128, t_dim)
+        self.up3 = nn.ConvTranspose2d(256, 256, kernel_size=2, stride=2)
+        self.decode_res5 = ResBlock(384, 128, t_dim)
+        self.decode_res6 = ResBlock(128, 128, t_dim)
 
         # output
         self.output_conv = nn.Conv2d(128, 3, kernel_size=3, stride=1, padding=1)
         
-    def forward(self, x):
-        t_embed = TimestepEmbed(t)
-        x = ResBlock.forward(x, self.time_embed)
-        x = SelfAttention.forward(x)
-        x = ResBlock.forward(x, self.time_embed)
-        pass
+    def forward(self, x, t):
+        t_embed = self.t_embed(t)
+        x = self.input_conv(x)
+
+        # encode
+        x = self.encode_res1(x, t_embed)
+        x = self.encode_res2(x, t_embed)
+        res0 = x
+        x = self.down1(x)
+
+        x = self.encode_res3(x, t_embed)
+        x = self.encode_res4(x, t_embed)
+        res1 = x
+        x = self.down2(x)
+        
+        x = self.encode_res5(x, t_embed)
+        x = self.attn1(x)
+        x = self.encode_res6(x, t_embed)
+        x = self.attn2(x)
+        res2 = x
+        x = self.down3(x)
+        
+        # bottlneck
+        x = self.bottleneck_res1(x, t_embed)
+        x = self.bottleneck_attn1(x)
+        x = self.bottleneck_res2(x, t_embed)
+        
+        # decode
+        x = self.up1(x)
+        x = torch.cat([x, res2], dim=1)  # 512 + 512 = 1024
+        x = self.decode_res1(x, t_embed)
+        x = self.decode_attn1(x)
+        x = self.decode_res2(x, t_embed)
+        x = self.decode_attn2(x)
+        
+        x = self.up2(x)
+        x = torch.cat([x, res1], dim=1)  # 512 + 256 = 768
+        x = self.decode_res3(x, t_embed)
+        x = self.decode_res4(x, t_embed)
+        
+        x = self.up3(x)
+        x = torch.cat([x, res0], dim=1)  # 256 + 128 = 384
+        x = self.decode_res5(x, t_embed)
+        x = self.decode_res6(x, t_embed)
+        
+        return self.output_conv(x)
