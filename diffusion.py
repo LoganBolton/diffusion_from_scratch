@@ -10,6 +10,8 @@ class DiffusionConstants:
         alpha_bar = torch.cumprod(self.alphas, dim=0)
         self.sqrt_alpha_bar = torch.sqrt(alpha_bar)
         self.sqrt_one_minus_alpha_bar = torch.sqrt(1-alpha_bar)
+        self.sqrt_alpha_bar = self.sqrt_alpha_bar.to('cuda' if torch.cuda.is_available() else 'cpu')
+        self.sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar.to('cuda' if torch.cuda.is_available() else 'cpu')
 
     def get_betas(self, t):
         beta_start = 0.0001
@@ -19,9 +21,9 @@ class DiffusionConstants:
     
     def add_noise(self, t, x0):
         epsilon = torch.randn_like(x0)
-        reduced_x = self.sqrt_alpha_bar[t] * x0
-        noise = self.sqrt_one_minus_alpha_bar[t] * epsilon
-        x_t = reduced_x + noise
+        sqrt_ab = self.sqrt_alpha_bar[t].reshape(-1, 1, 1, 1)
+        sqrt_omab = self.sqrt_one_minus_alpha_bar[t].reshape(-1, 1, 1, 1)
+        x_t = sqrt_ab * x0 + sqrt_omab * epsilon
         return x_t, epsilon
     
 class TimestepEmbed(nn.Module):
@@ -41,7 +43,7 @@ class TimestepEmbed(nn.Module):
     
     def embed_timestep(self, t):
         half_dim = self.DIM // 2
-        i = torch.arange(half_dim)
+        i = torch.arange(half_dim, device=t.device)
         denoms = 10_000 ** (2 * i / self.DIM)
         sin = torch.sin(t / denoms)
         cos = torch.cos(t / denoms)
