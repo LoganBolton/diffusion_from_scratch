@@ -5,6 +5,7 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+import wandb
 
 from diffusion import *
 
@@ -19,6 +20,7 @@ def cleanup_distributed():
 
 def main():
     rank = setup_distributed()
+    
 
     transform = transforms.Compose([
         transforms.Resize(64),
@@ -34,9 +36,9 @@ def main():
     )
 
 
-    EPOCHS = 1
+    EPOCHS = 10
     T=100
-    BATCH_SIZE = 64
+    BATCH_SIZE = 128
     LR = 1e-4
 
 
@@ -49,6 +51,14 @@ def main():
     sampler = DistributedSampler(dataset)
     dataloader = DataLoader(dataset, batch_size = BATCH_SIZE, sampler=sampler, num_workers=2)
     constants = DiffusionConstants(t=T, device=device)
+
+    if rank == 0:
+        wandb.init(project="diffusion-from-scratch", config={
+            "epochs": EPOCHS,
+            "batch_size": BATCH_SIZE,
+            "learning_rate": LR,
+            "t": T,
+        })
 
     for epoch in range(EPOCHS):
         sampler.set_epoch(epoch)
@@ -68,10 +78,17 @@ def main():
 
             if i % 100 == 0 and rank == 0:
                 print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
+                wandb.log({
+                    "loss": loss.item(),
+                    "epoch": epoch,
+                    "batch": i,
+                })
 
         if rank==0:
             print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
     cleanup_distributed()
+    if rank == 0:
+        wandb.finish()
 
     
 
