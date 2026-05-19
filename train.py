@@ -8,6 +8,7 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
 import wandb
+import os
 
 from diffusion import *
 
@@ -15,7 +16,6 @@ def setup_distributed():
     dist.init_process_group(backend='nccl')
     torch.cuda.set_device(dist.get_rank())
     return dist.get_rank()
-
 
 def cleanup_distributed():
     dist.destroy_process_group()
@@ -61,6 +61,9 @@ def main():
             "t": T,
         })
 
+    best_loss = float('inf')
+    os.makedirs("checkpoints", exist_ok=True)
+
     for epoch in range(EPOCHS):
         sampler.set_epoch(epoch)
         for i, (batch_images, _) in enumerate(dataloader):
@@ -77,19 +80,23 @@ def main():
             loss.backward()
             optimizer.step()
 
-            if i % 100 == 0 and rank == 0:
-                print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
-                wandb.log({
-                    "loss": loss.item(),
-                    "epoch": epoch,
-                    "batch": i,
-                })
+            # if i % 100 == 0 and rank == 0:
+            #     print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
 
         if rank==0:
             print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
+            wandb.log({
+                "loss": loss.item(),
+                "epoch": epoch,
+                "batch": i,
+            })
+
+        if rank == 0 and loss.item() < best_loss:
+            best_loss = loss.item()
+            print(f"Saving New Checkpoint - New best loss: {best_loss:.4f}")
+            torch.save(model.module.state_dict(), f"checkpoints/model_epoch_{epoch}.pt")
     cleanup_distributed()
     if rank == 0:
-        torch.save(model.module.state_dict(), "checkpoints/model.pt")
         wandb.finish()
 
     
