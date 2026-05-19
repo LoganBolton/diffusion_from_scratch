@@ -3,15 +3,15 @@ import torch
 import torch.nn as nn
 
 class DiffusionConstants:
-    def __init__(self, t):
+    def __init__(self, t, device):
         self.t = t
         self.betas = self.get_betas(t)
         self.alphas = 1 - self.betas
         alpha_bar = torch.cumprod(self.alphas, dim=0)
         self.sqrt_alpha_bar = torch.sqrt(alpha_bar)
         self.sqrt_one_minus_alpha_bar = torch.sqrt(1-alpha_bar)
-        self.sqrt_alpha_bar = self.sqrt_alpha_bar.to('cuda' if torch.cuda.is_available() else 'cpu')
-        self.sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar.to('cuda' if torch.cuda.is_available() else 'cpu')
+        self.sqrt_alpha_bar = self.sqrt_alpha_bar.to(device)
+        self.sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar.to(device)
 
     def get_betas(self, t):
         beta_start = 0.0001
