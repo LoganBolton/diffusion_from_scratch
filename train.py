@@ -14,14 +14,14 @@ transform = transforms.Compose([
 dataset = torchvision.datasets.CIFAR10(
     root='./data',
     train=True,
-    download=True,
+    download=False,
     transform=transform
 )
 
 
 EPOCHS = 1
 T=100
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 LR = 1e-4
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,20 +33,23 @@ dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_worker
 constants = DiffusionConstants(t=T)
 
 for epoch in range(EPOCHS):
-    for batch_images, _ in dataloader:
+    for i, (batch_images, _) in enumerate(dataloader):
         batch_images = batch_images.to(device)
         batch_size = batch_images.shape[0]
 
         t = torch.randint(0, T, (batch_size,)).to(device)
         noise_image, noise = constants.add_noise(t, batch_images)
-        
+
         pred_noise = model(noise_image, t.float().unsqueeze(1))
         loss = loss_fn(pred_noise, noise)
-        
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
+
+        if i % 100 == 0:
+            print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
+
     print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
 
  
