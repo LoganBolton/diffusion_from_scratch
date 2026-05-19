@@ -210,3 +210,7 @@ __marimo__/
 data/*
 
 wandb/*
+
+checkpoints/*
+
+outputs/*

@@ -8,8 +8,10 @@ class DiffusionConstants:
         self.betas = self.get_betas(t)
         self.alphas = 1 - self.betas
         alpha_bar = torch.cumprod(self.alphas, dim=0)
+        self.alpha_bar = alpha_bar.to(device)
         self.sqrt_alpha_bar = torch.sqrt(alpha_bar)
         self.sqrt_one_minus_alpha_bar = torch.sqrt(1-alpha_bar)
+        
         self.sqrt_alpha_bar = self.sqrt_alpha_bar.to(device)
         self.sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar.to(device)
 
@@ -25,6 +27,23 @@ class DiffusionConstants:
         sqrt_omab = self.sqrt_one_minus_alpha_bar[t].reshape(-1, 1, 1, 1)
         x_t = sqrt_ab * x0 + sqrt_omab * epsilon
         return x_t, epsilon
+    
+    def sample_step(self, model, x_t, t):
+        alpha = self.alphas[t]
+        beta = self.betas[t]
+        sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar[t]
+
+        t_tensor = torch.full((x_t.shape[0], 1), t, device=x_t.device, dtype=torch.float32)
+        pred_noise = model(x_t, t_tensor)
+
+        x_t_minus_1 = (1 / torch.sqrt(alpha)) * (x_t - (beta / sqrt_one_minus_alpha_bar) * pred_noise)
+
+        if t > 0:
+            z = torch.randn_like(x_t)
+            sigma_t = torch.sqrt(beta)
+            x_t_minus_1 = x_t_minus_1 + sigma_t * z
+
+        return x_t_minus_1
     
 class TimestepEmbed(nn.Module):
     def __init__(self):

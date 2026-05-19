@@ -1,3 +1,5 @@
+# uv run torchrun --nproc_per_node=2 train.py
+
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
@@ -35,9 +37,8 @@ def main():
         transform=transform
     )
 
-
-    EPOCHS = 10
-    T=100
+    EPOCHS = 1000
+    T=1000
     BATCH_SIZE = 128
     LR = 1e-4
 
@@ -88,6 +89,7 @@ def main():
             print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
     cleanup_distributed()
     if rank == 0:
+        torch.save(model.module.state_dict(), "checkpoints/model.pt")
         wandb.finish()
 
     
