@@ -127,7 +127,7 @@ class SelfAttention(nn.Module):
         soft_qkv = torch.softmax((qk / sqrt_d), dim=-1) @ v # (B, HW, C)
         
         out = self.output_proj(soft_qkv)
-        out = out.reshape(batch, channels, height, width)
+        out = out.transpose(1, 2).reshape(batch, channels, height, width)
         return out + x
         
         
