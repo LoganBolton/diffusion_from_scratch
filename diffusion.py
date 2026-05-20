@@ -1,7 +1,32 @@
 import math
 import torch
 import torch.nn as nn
+from transformers import AutoTokenizer, CLIPTextModel
 
+class ClipTextEncoder:
+    def __init__(self, device="cuda"):
+        model_id = "openai/clip-vit-base-patch32"
+        self.device = device
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.text_model = (
+            CLIPTextModel.from_pretrained(model_id)
+            .to(device)
+            .eval()
+            .requires_grad_(False)
+        )
+
+    def embed_text(self, caption):
+        inputs = self.tokenizer(
+            [caption],
+            padding="max_length",
+            max_length=77,
+            return_tensors="pt"
+        ).to(self.device)
+        with torch.inference_mode():
+            outputs = self.text_model(**inputs)
+        text_embeds = outputs.last_hidden_state
+        return text_embeds
+        
 class DiffusionConstants:
     def __init__(self, t, device):
         self.t = t
