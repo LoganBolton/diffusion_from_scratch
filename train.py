@@ -11,6 +11,7 @@ import wandb
 import os
 
 from diffusion import *
+from text_embedding import ClipTextEncoder
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
@@ -21,9 +22,7 @@ def cleanup_distributed():
     dist.destroy_process_group()
 
 def main():
-    rank = setup_distributed()
     
-
     transform = transforms.Compose([
         transforms.Resize(64),
         transforms.ToTensor(),
@@ -42,10 +41,11 @@ def main():
     BATCH_SIZE = 128
     LR = 1e-4
 
-
+    rank = setup_distributed()
     device = f"cuda:{rank}"
     model = UNet().to(device)
     model = DDP(model, device_ids=[rank])
+    clip_text_encoder = ClipTextEncoder(device=device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     loss_fn = nn.MSELoss()
 
@@ -66,22 +66,20 @@ def main():
 
     for epoch in range(EPOCHS):
         sampler.set_epoch(epoch)
-        for i, (batch_images, _) in enumerate(dataloader):
+        for i, (batch_images, class_idxs) in enumerate(dataloader):
             batch_images = batch_images.to(device)
             batch_size = batch_images.shape[0]
 
             t = torch.randint(0, T, (batch_size,)).to(device)
             noise_image, noise = constants.add_noise(t, batch_images)
+            text_embed = clip_text_encoder.batch_embeds(class_idxs)
 
-            pred_noise = model(noise_image, t.float().unsqueeze(1))
+            pred_noise = model(noise_image, t.float().unsqueeze(1), text_embed)
             loss = loss_fn(pred_noise, noise)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
-            # if i % 100 == 0 and rank == 0:
-            #     print(f"Epoch {epoch+1}/{EPOCHS} | Batch {i}/{len(dataloader)} | Loss: {loss.item():.4f}")
 
         if rank==0:
             print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")

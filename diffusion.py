@@ -1,31 +1,6 @@
 import math
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, CLIPTextModel
-
-class ClipTextEncoder:
-    def __init__(self, device="cuda"):
-        model_id = "openai/clip-vit-base-patch32"
-        self.device = device
-        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
-        self.text_model = (
-            CLIPTextModel.from_pretrained(model_id)
-            .to(device)
-            .eval()
-            .requires_grad_(False)
-        )
-
-    def embed_text(self, caption):
-        inputs = self.tokenizer(
-            [caption],
-            padding="max_length",
-            max_length=77,
-            return_tensors="pt"
-        ).to(self.device)
-        with torch.inference_mode():
-            outputs = self.text_model(**inputs)
-        text_embeds = outputs.last_hidden_state
-        return text_embeds
         
 class DiffusionConstants:
     def __init__(self, t, device):
@@ -128,6 +103,32 @@ class ResBlock(nn.Module):
         h = self.conv2(h)
         return h + self.skip_conv(x)
     
+class CrossAttention(nn.Module):
+    def __init__(self, image_channels, text_channels):
+        super().__init__()
+        self.gn = nn.GroupNorm(num_groups = 32, num_channels = image_channels)
+        self.q = nn.Linear(image_channels, image_channels)
+        self.k = nn.Linear(text_channels, image_channels)
+        self.v = nn.Linear(text_channels, image_channels)
+        self.output_proj = nn.Linear(image_channels, image_channels)
+        
+    def forward(self, x, text_embed):
+        h = self.gn(x)
+        batch, img_channels, height, width = h.shape
+        h = h.reshape(batch, img_channels, height * width) # (B, C, H, W) -> (B, C, HW)
+        h = h.transpose(1, 2) # (B, HW, C)
+        q = self.q(h)
+        k = self.k(text_embed)
+        v = self.v(text_embed)
+
+        qk = q @ k.transpose(-2, -1) # (B, HW, C) @ (B, C, HW)
+        sqrt_d = math.sqrt(img_channels)
+        soft_qkv = torch.softmax((qk / sqrt_d), dim=-1) @ v # (B, HW, C)
+        
+        out = self.output_proj(soft_qkv)
+        out = out.transpose(1, 2).reshape(batch, img_channels, height, width)
+        return out + x
+        
     
 class SelfAttention(nn.Module):
     def __init__(self, channels):
@@ -159,6 +160,7 @@ class SelfAttention(nn.Module):
 class UNet(nn.Module):
     def __init__(self, t_dim=256):
         super().__init__()
+        self.TEXT_EMBED_SIZE = 512
         self.t_embed = TimestepEmbed()
         # Image in: 3 channels -> 128 channels
         self.input_conv = nn.Conv2d(3, 128, kernel_size=3, padding=1)
@@ -176,21 +178,26 @@ class UNet(nn.Module):
         # Encoder level 2: 16x16, 512ch 
         self.encode_res5 = ResBlock(256, 512, t_dim)
         self.attn1 = SelfAttention(512)
+        self.cross_attn1 = CrossAttention(512, self.TEXT_EMBED_SIZE)
         self.encode_res6 = ResBlock(512, 512, t_dim)
         self.attn2 = SelfAttention(512)
+        self.cross_attn2 = CrossAttention(512, self.TEXT_EMBED_SIZE)
         self.down3 = nn.Conv2d(512, 512, kernel_size=2, stride=2)
 
         # Bottleneck: 8x8, 512ch 
         self.bottleneck_res1 = ResBlock(512, 512, t_dim)
         self.bottleneck_attn1 = SelfAttention(512)
+        self.bottleneck_cross_attn1 = CrossAttention(512, self.TEXT_EMBED_SIZE)
         self.bottleneck_res2 = ResBlock(512, 512, t_dim)
         
         # Decoder level 2: 8x8 -> 16x16, 512ch
         self.up1 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
         self.decode_res1 = ResBlock(1024, 512, t_dim)
         self.decode_attn1 = SelfAttention(512)
+        self.decode_cross_attn1 = CrossAttention(512, self.TEXT_EMBED_SIZE)
         self.decode_res2 = ResBlock(512, 512, t_dim)
         self.decode_attn2 = SelfAttention(512)
+        self.decode_cross_attn2 = CrossAttention(512, self.TEXT_EMBED_SIZE)
 
         # Decoder level 1: 16x16 -> 32x32, 256ch
         self.up2 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
@@ -205,7 +212,7 @@ class UNet(nn.Module):
         # output
         self.output_conv = nn.Conv2d(128, 3, kernel_size=3, stride=1, padding=1)
         
-    def forward(self, x, t):
+    def forward(self, x, t, text_embed):
         t_embed = self.t_embed(t)
         x = self.input_conv(x)
 
@@ -222,14 +229,17 @@ class UNet(nn.Module):
         
         x = self.encode_res5(x, t_embed)
         x = self.attn1(x)
+        x = self.cross_attn1(x, text_embed)
         x = self.encode_res6(x, t_embed)
         x = self.attn2(x)
+        x = self.cross_attn2(x, text_embed)
         res2 = x
         x = self.down3(x)
         
         # bottlneck
         x = self.bottleneck_res1(x, t_embed)
         x = self.bottleneck_attn1(x)
+        x = self.bottleneck_cross_attn1(x, text_embed)
         x = self.bottleneck_res2(x, t_embed)
         
         # decode
@@ -237,8 +247,10 @@ class UNet(nn.Module):
         x = torch.cat([x, res2], dim=1)  # 512 + 512 = 1024
         x = self.decode_res1(x, t_embed)
         x = self.decode_attn1(x)
+        x = self.decode_cross_attn1(x, text_embed)
         x = self.decode_res2(x, t_embed)
         x = self.decode_attn2(x)
+        x = self.decode_cross_attn2(x, text_embed)
         
         x = self.up2(x)
         x = torch.cat([x, res1], dim=1)  # 512 + 256 = 768
