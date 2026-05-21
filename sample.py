@@ -3,20 +3,27 @@ import torchvision
 import torch
 import os
 import time
+import json
+import argparse
 import matplotlib.pyplot as plt
 from PIL import Image
 from text_embedding import ClipTextEncoder
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--prompt", type=str, default="A picture of a cat")
+    parser.add_argument("--w", type=float, default=3.0)
+    args = parser.parse_args()
+
     model = UNet()
-    model.load_state_dict(torch.load("checkpoints/model_epoch_104.pt"))
+    model.load_state_dict(torch.load("checkpoints/text_condition/model_best_epoch_269.pt"))
     model.eval()
     model.to("cuda")
 
-    PROMPT = "A picture of a cat"
+    PROMPT = args.prompt
     TIMESTEPS = 1000
     SAVE_EVERY = 200
-    w = 3.0
+    w = args.w
 
     constants = DiffusionConstants(t=TIMESTEPS, device="cuda")
     x_t = torch.randn(1, 3, 64, 64).to("cuda")
@@ -24,6 +31,9 @@ def main():
     current_sys_time = time.time()
     output_dir = f"outputs/{current_sys_time}"
     os.makedirs(output_dir, exist_ok=True)
+
+    with open(f"{output_dir}/meta.json", "w") as f:
+        json.dump({"prompt": PROMPT, "w": w}, f)
 
     # Save the initial pure noise image at T=1000
     scaled_x_t = (x_t + 1) / 2
