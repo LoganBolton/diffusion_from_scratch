@@ -30,6 +30,10 @@ Below is a log of things I add in the learning process.
 - Just did simple predetermined prompts based off CIFAR-10 class, ex: "a photo of a car"
 - Added cross attention between text and image
 
+## v5 - add guidance scale
+
+- In the sampling code, generate an image with and without the text prompt
+- Use a new hyperparam `w` to encourage the model to generate images more like the text prompt
 
 
 # Things I've learned
@@ -47,17 +51,6 @@ I spent a lot of time going back and forth with Opus trying to understand the eq
 
 # to do
 
-  ---                                                                                                                                                   
-  1. Classifier-Free Guidance Scale at Inference Time
-
-  Why: You already train with 10% unconditional dropout, but your sample_step doesn't appear to use a guidance scale w at inference. This is the key
-  insight that makes text conditioning actually work well:
-
-  noise_pred = noise_uncond + w * (noise_cond - noise_uncond)
-
-  This is a small change (~10 lines) but will dramatically improve your outputs and teach you how guidance strength trades off diversity vs. fidelity.
-
-  ---
   2. DDIM Sampler
 
   Why: Your current DDPM sampler needs all 1000 steps. DDIM (Song et al. 2020) makes the reverse process deterministic and lets you skip steps (e.g., 50
@@ -74,3 +67,9 @@ I spent a lot of time going back and forth with Opus trying to understand the eq
   Why: Your linear schedule (beta_start=0.0001, beta_end=0.02) is the original DDPM default but wastes steps at high noise levels. The cosine schedule
   (Nichol & Dhariwal 2021) is a one-function change that teaches you how the noise schedule shape directly affects sample quality. You can compare outputs
    side-by-side.
+
+Bugs                                                                                                                                                    
+  1. diffusion.py:33-34 — alphas and betas are not on the correct device during sampling. self.alphas and self.betas are plain CPU tensors (never moved to
+   device), but sqrt_one_minus_alpha_bar is on CUDA. The math on line 42 will work because PyTorch broadcasts CPU scalars, but it's inconsistent and could
+   cause silent device-mismatch issues depending on the PyTorch version. self.alpha_bar is moved to device (line 12) but self.alphas and self.betas are   
+  not.    

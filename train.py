@@ -89,7 +89,6 @@ def main():
             wandb.log({
                 "loss": average_epoch_loss,
                 "epoch": epoch,
-                "batch": i,
             })
 
         if rank == 0:
@@ -97,7 +96,7 @@ def main():
                 best_loss = average_epoch_loss
                 print(f"Saving New Checkpoint at {epoch} - New best loss: {best_loss:.5f}")
                 torch.save(model.module.state_dict(), f"checkpoints/model_best_epoch_{epoch}.pt")
-            elif epoch%20 == 0:
+            elif epoch % 20 == 0:
                 torch.save(model.module.state_dict(), f"checkpoints/model_epoch_{epoch}.pt")
     cleanup_distributed()
     if rank == 0:

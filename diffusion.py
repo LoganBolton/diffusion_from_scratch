@@ -1,7 +1,6 @@
 import math
 import torch
 import torch.nn as nn
-from text_embedding import ClipTextEncoder
         
 class DiffusionConstants:
     def __init__(self, t, device):

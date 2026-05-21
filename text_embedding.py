@@ -33,7 +33,7 @@ class ClipTextEncoder:
         return text_embeds
     
     def convert_class_idx(self, class_idx):
-        if random.random() < 0.1: # randomly dropout class embed 10% of time
+        if torch.rand(1).item() < 0.1: # randomly dropout class embed 10% of time
             return torch.zeros(1,77,512).to(self.device)
         return self.class_embeds[class_idx]
     
