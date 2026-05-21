@@ -16,6 +16,7 @@ def main():
     PROMPT = "A picture of a cat"
     TIMESTEPS = 1000
     SAVE_EVERY = 200
+    w = 3.0
 
     constants = DiffusionConstants(t=TIMESTEPS, device="cuda")
     x_t = torch.randn(1, 3, 64, 64).to("cuda")
@@ -37,7 +38,7 @@ def main():
 
     with torch.no_grad():
         for t in range(TIMESTEPS - 1, -1, -1):
-            x_t = constants.sample_step(model, x_t, t, text_embed)
+            x_t = constants.sample_step(model, x_t, t, text_embed, w)
 
             if t % SAVE_EVERY == 0:
                 print(f"Step {t}/{TIMESTEPS}")

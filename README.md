@@ -44,3 +44,33 @@ Originally, I had my training loop to just save a new checkpoint when it got a b
 
 ### Take some time to **really** understand the details
 I spent a lot of time going back and forth with Opus trying to understand the equations before I coded anything. I'm really glad I did this. It saves you a lot of pain trying to understand what you want to make before you actually just jump in and make a dumb decision.
+
+# to do
+
+  ---                                                                                                                                                   
+  1. Classifier-Free Guidance Scale at Inference Time
+
+  Why: You already train with 10% unconditional dropout, but your sample_step doesn't appear to use a guidance scale w at inference. This is the key
+  insight that makes text conditioning actually work well:
+
+  noise_pred = noise_uncond + w * (noise_cond - noise_uncond)
+
+  This is a small change (~10 lines) but will dramatically improve your outputs and teach you how guidance strength trades off diversity vs. fidelity.
+
+  ---
+  2. DDIM Sampler
+
+  Why: Your current DDPM sampler needs all 1000 steps. DDIM (Song et al. 2020) makes the reverse process deterministic and lets you skip steps (e.g., 50
+  steps instead of 1000). Implementing it teaches you:
+  - The difference between stochastic (DDPM) and deterministic (DDIM) sampling
+  - How the same trained model can be used with different samplers
+  - The concept of "eta" interpolating between DDPM and DDIM
+
+  This is ~30-40 lines of new code in diffusion.py.
+
+  ---
+  3. Cosine Noise Schedule
+
+  Why: Your linear schedule (beta_start=0.0001, beta_end=0.02) is the original DDPM default but wastes steps at high noise levels. The cosine schedule
+  (Nichol & Dhariwal 2021) is a one-function change that teaches you how the noise schedule shape directly affects sample quality. You can compare outputs
+   side-by-side.
