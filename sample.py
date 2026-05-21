@@ -5,6 +5,7 @@ import os
 import time
 import matplotlib.pyplot as plt
 from PIL import Image
+from text_embedding import ClipTextEncoder
 
 def main():
     model = UNet()
@@ -12,6 +13,7 @@ def main():
     model.eval()
     model.to("cuda")
 
+    PROMPT = "A picture of a cat"
     TIMESTEPS = 1000
     SAVE_EVERY = 200
 
@@ -30,9 +32,12 @@ def main():
         f"{output_dir}/sample_{TIMESTEPS}.png"
     )
 
+    text_encoder = ClipTextEncoder(device="cuda")
+    text_embed = text_encoder.embed_text(PROMPT)
+
     with torch.no_grad():
         for t in range(TIMESTEPS - 1, -1, -1):
-            x_t = constants.sample_step(model, x_t, t)
+            x_t = constants.sample_step(model, x_t, t, text_embed)
 
             if t % SAVE_EVERY == 0:
                 print(f"Step {t}/{TIMESTEPS}")

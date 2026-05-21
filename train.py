@@ -66,6 +66,7 @@ def main():
 
     for epoch in range(EPOCHS):
         sampler.set_epoch(epoch)
+        batch_losses = []
         for i, (batch_images, class_idxs) in enumerate(dataloader):
             batch_images = batch_images.to(device)
             batch_size = batch_images.shape[0]
@@ -76,23 +77,28 @@ def main():
 
             pred_noise = model(noise_image, t.float().unsqueeze(1), text_embed)
             loss = loss_fn(pred_noise, noise)
+            batch_losses.append(loss.item())
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+        average_epoch_loss = sum(batch_losses) / len(batch_losses)
         if rank==0:
-            print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {loss.item():.4f}")
+            print(f"Epoch {epoch+1}/{EPOCHS} | Loss: {average_epoch_loss:.4f}")
             wandb.log({
-                "loss": loss.item(),
+                "loss": average_epoch_loss,
                 "epoch": epoch,
                 "batch": i,
             })
 
-        if rank == 0 and loss.item() < best_loss:
-            best_loss = loss.item()
-            print(f"Saving New Checkpoint - New best loss: {best_loss:.4f}")
-            torch.save(model.module.state_dict(), f"checkpoints/model_epoch_{epoch}.pt")
+        if rank == 0:
+            if average_epoch_loss < best_loss:
+                best_loss = average_epoch_loss
+                print(f"Saving New Checkpoint - New best loss: {best_loss:.4f}")
+                torch.save(model.module.state_dict(), f"checkpoints/model_best_epoch_{epoch}.pt")
+            elif epoch%20 == 0:
+                torch.save(model.module.state_dict(), f"checkpoints/model_epoch_{epoch}.pt")
     cleanup_distributed()
     if rank == 0:
         wandb.finish()

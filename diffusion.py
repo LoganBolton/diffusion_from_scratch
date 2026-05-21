@@ -1,6 +1,7 @@
 import math
 import torch
 import torch.nn as nn
+from text_embedding import ClipTextEncoder
         
 class DiffusionConstants:
     def __init__(self, t, device):
@@ -28,13 +29,13 @@ class DiffusionConstants:
         x_t = sqrt_ab * x0 + sqrt_omab * epsilon
         return x_t, epsilon
     
-    def sample_step(self, model, x_t, t):
+    def sample_step(self, model, x_t, t, text_embed):
         alpha = self.alphas[t]
         beta = self.betas[t]
         sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar[t]
 
         t_tensor = torch.full((x_t.shape[0], 1), t, device=x_t.device, dtype=torch.float32)
-        pred_noise = model(x_t, t_tensor)
+        pred_noise = model(x_t, t_tensor, text_embed)
 
         x_t_minus_1 = (1 / torch.sqrt(alpha)) * (x_t - (beta / sqrt_one_minus_alpha_bar) * pred_noise)
 
