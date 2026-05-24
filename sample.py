@@ -22,7 +22,6 @@ def main():
 
     PROMPT = args.prompt
     TIMESTEPS = 1000
-    SAVE_EVERY = 200
     w = args.w
 
     constants = DiffusionConstants(t=TIMESTEPS, device="cuda")
@@ -52,21 +51,19 @@ def main():
             t_prev = max(t - STEP_SIZE, 0)
             x_t = constants.sample_step(model, x_t, t, t_prev, text_embed, w)
             
-            if t % SAVE_EVERY == 0:
-                print(f"Step {t}/{TIMESTEPS}")
-                scaled_x_t = (x_t + 1) / 2
-                scaled_x_t = scaled_x_t.clamp(0, 1)
-                torchvision.utils.save_image(
-                    scaled_x_t,
-                    f"{output_dir}/sample_{t}.png"
-                )
+            scaled_x_t = (x_t + 1) / 2
+            scaled_x_t = scaled_x_t.clamp(0, 1)
+            torchvision.utils.save_image(
+                scaled_x_t,
+                f"{output_dir}/sample_{t_prev}.png"
+            )
 
     # Left to right: noisy -> clean
-    frame_ts = [TIMESTEPS] + list(range(TIMESTEPS - SAVE_EVERY, -1, -SAVE_EVERY))
+    frame_ts = [TIMESTEPS] + [max(t - STEP_SIZE, 0) for t in range(TIMESTEPS - 1, -1, -STEP_SIZE)]  
 
     images = [
-        Image.open(f"{output_dir}/sample_{t}.png").convert("RGB")
-        for t in frame_ts
+        Image.open(f"{output_dir}/sample_{t_prev}.png").convert("RGB")
+        for t_prev in frame_ts
     ]
 
     fig, axes = plt.subplots(1, len(images), figsize=(len(images) * 2, 2))
