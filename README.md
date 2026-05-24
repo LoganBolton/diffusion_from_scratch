@@ -35,6 +35,9 @@ Below is a log of things I add in the learning process.
 - In the sampling code, generate an image with and without the text prompt
 - Use a new hyperparam `w` to encourage the model to generate images more like the text prompt
 
+## v6 - added DDIM sampling
+
+- Optimized the inference process to be 50x faster with minimal degredation to quality 
 
 # Things I've learned
 
@@ -51,25 +54,8 @@ I spent a lot of time going back and forth with Opus trying to understand the eq
 
 # to do
 
-  2. DDIM Sampler
-
-  Why: Your current DDPM sampler needs all 1000 steps. DDIM (Song et al. 2020) makes the reverse process deterministic and lets you skip steps (e.g., 50
-  steps instead of 1000). Implementing it teaches you:
-  - The difference between stochastic (DDPM) and deterministic (DDIM) sampling
-  - How the same trained model can be used with different samplers
-  - The concept of "eta" interpolating between DDPM and DDIM
-
-  This is ~30-40 lines of new code in diffusion.py.
-
-  ---
   3. Cosine Noise Schedule
 
   Why: Your linear schedule (beta_start=0.0001, beta_end=0.02) is the original DDPM default but wastes steps at high noise levels. The cosine schedule
   (Nichol & Dhariwal 2021) is a one-function change that teaches you how the noise schedule shape directly affects sample quality. You can compare outputs
    side-by-side.
-
-Bugs                                                                                                                                                    
-  1. diffusion.py:33-34 — alphas and betas are not on the correct device during sampling. self.alphas and self.betas are plain CPU tensors (never moved to
-   device), but sqrt_one_minus_alpha_bar is on CUDA. The math on line 42 will work because PyTorch broadcasts CPU scalars, but it's inconsistent and could
-   cause silent device-mismatch issues depending on the PyTorch version. self.alpha_bar is moved to device (line 12) but self.alphas and self.betas are   
-  not.    
