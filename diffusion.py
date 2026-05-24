@@ -28,9 +28,7 @@ class DiffusionConstants:
         x_t = sqrt_ab * x0 + sqrt_omab * epsilon
         return x_t, epsilon
     
-    def sample_step(self, model, x_t, t, text_embed, w):
-        alpha = self.alphas[t]
-        beta = self.betas[t]
+    def sample_step(self, model, x_t, t, t_prev, text_embed, w):
         sqrt_one_minus_alpha_bar = self.sqrt_one_minus_alpha_bar[t]
         t_tensor = torch.full((x_t.shape[0], 1), t, device=x_t.device, dtype=torch.float32)
 
@@ -38,14 +36,25 @@ class DiffusionConstants:
         noise_uncod = model(x_t, t_tensor, torch.zeros_like(text_embed))
         pred_noise = noise_uncod + w * (noise_cod - noise_uncod)
 
-        x_t_minus_1 = (1 / torch.sqrt(alpha)) * (x_t - (beta / sqrt_one_minus_alpha_bar) * pred_noise)
+        # DDPM (slow) $$x_{t-1}=\frac{1}{\sqrt{\alpha_t}}\left(x_t-\frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}}\hat{\epsilon}_{\theta}\right)$$
+        # x_t_minus_1 = (1 / torch.sqrt(alpha)) * (x_t - (beta / sqrt_one_minus_alpha_bar) * pred_noise)
+        # if t > 0:
+        #     z = torch.randn_like(x_t)
+        #     sigma_t = torch.sqrt(beta)
+        #     # $$x_{t-1}=x_{t-1}+\sigma_tz$$
+        #     x_t_minus_1 = x_t_minus_1 + sigma_t * z
 
-        if t > 0:
-            z = torch.randn_like(x_t)
-            sigma_t = torch.sqrt(beta)
-            x_t_minus_1 = x_t_minus_1 + sigma_t * z
+        # DDIM (fast)
+        
+        # $$\hat{x}_0 = \frac{x_t - \sqrt{1-\bar{\alpha}_t}\, \epsilon_\theta}{\sqrt{\bar{\alpha}_t}}$$
+        clean_prediction = (x_t - sqrt_one_minus_alpha_bar * pred_noise) \
+            / self.sqrt_alpha_bar[t]
 
+        # $$x_{t-1} = \sqrt{\bar{\alpha}_{t-1}}\, \hat{x}_0 + \sqrt{1-\bar{\alpha}_{t-1}}\, \epsilon_\theta$$
+        x_t_minus_1 = self.sqrt_alpha_bar[t_prev] * clean_prediction \
+            + self.sqrt_one_minus_alpha_bar[t_prev] * pred_noise
         return x_t_minus_1
+        
     
 class TimestepEmbed(nn.Module):
     def __init__(self):

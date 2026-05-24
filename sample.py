@@ -47,9 +47,11 @@ def main():
     text_embed = text_encoder.embed_text(PROMPT)
 
     with torch.no_grad():
-        for t in range(TIMESTEPS - 1, -1, -1):
-            x_t = constants.sample_step(model, x_t, t, text_embed, w)
-
+        STEP_SIZE = 50
+        for t in range(TIMESTEPS-1, -1, -STEP_SIZE):
+            t_prev = max(t - STEP_SIZE, 0)
+            x_t = constants.sample_step(model, x_t, t, t_prev, text_embed, w)
+            
             if t % SAVE_EVERY == 0:
                 print(f"Step {t}/{TIMESTEPS}")
                 scaled_x_t = (x_t + 1) / 2
