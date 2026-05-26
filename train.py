@@ -12,6 +12,7 @@ import os
 
 from diffusion import *
 from text_embedding import ClipTextEncoder
+from unet import UNet
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
