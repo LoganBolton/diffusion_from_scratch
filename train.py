@@ -12,7 +12,8 @@ import os
 
 from diffusion import *
 from text_embedding import ClipTextEncoder
-from unet import UNet
+# from unet import UNet
+from dit import *
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
@@ -45,10 +46,11 @@ def main():
 
     rank = setup_distributed()
     device = f"cuda:{rank}"
-    model = UNet().to(device)
+    model = DiT(hidden_dim=512, num_heads=8, num_layers=12).to(device)
     model = DDP(model, device_ids=[rank])
     clip_text_encoder = ClipTextEncoder(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=LR, weight_decay=0.05)
+    scheduler = torch.optim.lr_scheduler.LinearLR(optimizer, start_factor = 0.01, total_iters=5000)
     loss_fn = nn.MSELoss()
 
     sampler = DistributedSampler(dataset)
@@ -84,6 +86,7 @@ def main():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            scheduler.step()
 
         average_epoch_loss = sum(batch_losses) / len(batch_losses)
         if rank==0:

@@ -1,6 +1,7 @@
 import torch 
 import torch.nn as nn
 import math
+from diffusion import TimestepEmbed
 
 class DiTBlock(nn.Module):
     def __init__(self, hidden_dim, num_heads):
@@ -37,17 +38,23 @@ class DiTBlock(nn.Module):
         return x
     
 class DiT(nn.Module):
-    def __init__(self, img_size=64, patch_size=4, hidden_dim=512, num_heads=8, num_layers=12):
+    def __init__(self, img_size=64, patch_size=4, hidden_dim=512, num_heads=8, num_layers=6):
         super().__init__()
         self.patch_proj = nn.Conv2d(
             in_channels=3,
             out_channels=hidden_dim,
             kernel_size=patch_size,
-            stride_size=patch_size
+            stride=patch_size
         )
+        self.patch_size = patch_size
         self.num_patches = (img_size // patch_size) ** 2
-        self.pos_embed = nn.Parameter(torch.zeroes(1, self.num_patches, hidden_dim))
-        
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches, hidden_dim))
+        self.time_embed = TimestepEmbed()
+        self.time_proj = nn.Linear(256, hidden_dim)
+        self.text_proj = nn.Linear(512, hidden_dim)
+        self.blocks = nn.ModuleList([DiTBlock(hidden_dim, num_heads) for _ in range(num_layers)])
+        self.final_norm = nn.LayerNorm(hidden_dim, elementwise_affine=False)
+        self.final_linear = nn.Linear(hidden_dim, patch_size * patch_size * 3)
     
     def patchify(self, x):
         x = self.patch_proj(x) # b, hidden_dim, 16, 16
@@ -56,9 +63,26 @@ class DiT(nn.Module):
         return x
     
     def unpatchify(self, x):
-        pass
-    
+        # x is (batch, 256, patch_size * patch_size * 3)
+        p = self.patch_size
+        h = w = int(x.shape[1] ** 0.5)          # 16 — grid size
+
+        x = x.reshape(x.shape[0], h, w, p, p, 3)  # lay out the grid and patch pixels
+        x = x.permute(0, 5, 1, 3, 2, 4)            # (batch, 3, h, p, w, p)
+        x = x.reshape(x.shape[0], 3, h * p, w * p) # (batch, 3, 64, 64)
+        return x
+
     def forward(self, x, t, text_embed):
-        pass
+        x = self.patchify(x)
+        x = x + self.pos_embed
+        t_embed = self.time_proj(self.time_embed(t))
+        text_embed = self.text_proj(text_embed)
+        cond = t_embed + text_embed.mean(dim=1)
+        
+        for block in self.blocks:
+            x = block(x, cond)
+        x = self.final_norm(x)
+        x = self.final_linear(x)
+        return self.unpatchify(x)
     
     
