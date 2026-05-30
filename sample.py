@@ -8,6 +8,7 @@ import argparse
 import matplotlib.pyplot as plt
 from PIL import Image
 from text_embedding import ClipTextEncoder
+from dit import DiT
 
 def main():
     parser = argparse.ArgumentParser()
@@ -15,8 +16,8 @@ def main():
     parser.add_argument("--w", type=float, default=3.0)
     args = parser.parse_args()
 
-    model = UNet()
-    model.load_state_dict(torch.load("checkpoints/text_condition/model_best_epoch_269.pt"))
+    model = DiT(num_layers=12)
+    model.load_state_dict(torch.load("checkpoints/ditv1/model_best_epoch_92.pt"))
     model.eval()
     model.to("cuda")
 

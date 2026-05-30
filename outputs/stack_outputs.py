@@ -11,7 +11,7 @@ LABEL_WIDTH = 200
 
 def stack_images(input_dir: str | None = None, output_path: str | None = None):
     if input_dir is None:
-        input_dir = Path(__file__).parent / "ddim_v1"
+        input_dir = Path(__file__).parent / "ditv1_early"
     else:
         input_dir = Path(input_dir)
     subdirs = sorted(input_dir.iterdir())
