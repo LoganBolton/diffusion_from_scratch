@@ -11,9 +11,12 @@ import wandb
 import os
 
 from diffusion import *
+import flow_matching
 from text_embedding import ClipTextEncoder
 # from unet import UNet
 from dit import *
+
+from flow_matching import FlowMatching
 
 def setup_distributed():
     dist.init_process_group(backend='nccl')
@@ -55,7 +58,8 @@ def main():
 
     sampler = DistributedSampler(dataset)
     dataloader = DataLoader(dataset, batch_size = BATCH_SIZE, sampler=sampler, num_workers=2)
-    constants = DiffusionConstants(t=T, device=device)
+    # constants = DiffusionConstants(t=T, device=device)
+    fm = FlowMatching()
 
     if rank == 0:
         wandb.init(project="diffusion-from-scratch", config={
@@ -74,13 +78,20 @@ def main():
         for i, (batch_images, class_idxs) in enumerate(dataloader):
             batch_images = batch_images.to(device)
             batch_size = batch_images.shape[0]
-
-            t = torch.randint(0, T, (batch_size,)).to(device)
-            noise_image, noise = constants.add_noise(t, batch_images)
             text_embed = clip_text_encoder.batch_embeds(class_idxs)
 
-            pred_noise = model(noise_image, t.float().unsqueeze(1), text_embed)
-            loss = loss_fn(pred_noise, noise)
+            # diffusion
+            # t = torch.randint(0, T, (batch_size,)).to(device)
+            # noise_image, noise = constants.add_noise(t, batch_images)
+            # pred_noise = model(noise_image, t.float().unsqueeze(1), text_embed)
+            # loss = loss_fn(pred_noise, noise)
+
+            # flow matching
+            t = torch.rand(batch_size, device=device)
+            x_t, target = fm.interpolate(t, batch_images)
+            pred_v = model(x_t, (t*T).unsqueeze(1), text_embed)
+            loss = loss_fn(pred_v, target)
+            
             batch_losses.append(loss.item())
 
             optimizer.zero_grad()

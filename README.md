@@ -59,8 +59,4 @@ I spent a lot of time going back and forth with Opus trying to understand the eq
 
 # to do
 
-  3. Cosine Noise Schedule
-
-  Why: Your linear schedule (beta_start=0.0001, beta_end=0.02) is the original DDPM default but wastes steps at high noise levels. The cosine schedule
-  (Nichol & Dhariwal 2021) is a one-function change that teaches you how the noise schedule shape directly affects sample quality. You can compare outputs
-   side-by-side.
+- add Cosine Noise Schedule
