@@ -20,7 +20,7 @@ Below is a log of things I add in the learning process.
 - Put model weights on each GPU
     - Split batch samples across both GPUs equally
 
-## v3 - Sampling
+## v3 - Adding Sampling Code
 
 - After training a model, worte basic sampling code to actually generate images from random noise
 
@@ -44,6 +44,10 @@ Below is a log of things I add in the learning process.
 - Switched from classic U-Net to diffusion transformer. 
 - The U-Net performed better in terms of loss and my own qualitative judgement. However, my data is pretty simple with 32x32 images and consistent class level text prompts. I think if I expanded my dataset to be much more complex then DiT would show it's potential more. If anything, this has me thinking more about how scaling isn't as obvious as you migth think with 2026 retrospect. 
 
+## v8 - Added Flow Matching
+
+- Switched from using diffusion to rectified flow for the training objective.
+
 # Things I've learned
 
 ### Be very careful about the shape of your tensors!
@@ -60,3 +64,5 @@ I spent a lot of time going back and forth with Opus trying to understand the eq
 # to do
 
 - add Cosine Noise Schedule
+- Precompute VAE latents and text embeddings
+- look into EMA

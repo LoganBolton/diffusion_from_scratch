@@ -18,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     model = DiT(num_layers=12)
-    model.load_state_dict(torch.load("checkpoints/flow_match_v2/model_best_epoch_517.pt"))
+    model.load_state_dict(torch.load("checkpoints/flow_match_v1/model_best_epoch_517.pt"))
     model.eval()
     model.to("cuda")
 
@@ -65,7 +65,7 @@ def main():
     # Left to right: noisy -> clean
     images = [Image.open(p).convert("RGB") for p in frame_paths]
 
-    fig, axes = plt.subplots(1, len(images), figsize=(len(images) * 2, 2))
+    _, axes = plt.subplots(1, len(images), figsize=(len(images) * 2, 2))
 
     if len(images) == 1:
         axes = [axes]
