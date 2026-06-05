@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 from text_embedding import ClipTextEncoder
 from dit import DiT
+from flow_matching import FlowMatching
 
 def main():
     parser = argparse.ArgumentParser()
@@ -17,7 +18,7 @@ def main():
     args = parser.parse_args()
 
     model = DiT(num_layers=12)
-    model.load_state_dict(torch.load("checkpoints/ditv1/model_best_epoch_92.pt"))
+    model.load_state_dict(torch.load("checkpoints/flow_match_v2/model_best_epoch_517.pt"))
     model.eval()
     model.to("cuda")
 
@@ -25,7 +26,8 @@ def main():
     TIMESTEPS = 1000
     w = args.w
 
-    constants = DiffusionConstants(t=TIMESTEPS, device="cuda")
+    # constants = DiffusionConstants(t=TIMESTEPS, device="cuda")
+    fm = FlowMatching()
     x_t = torch.randn(1, 3, 64, 64).to("cuda")
 
     current_sys_time = time.time()
@@ -35,46 +37,42 @@ def main():
     with open(f"{output_dir}/meta.json", "w") as f:
         json.dump({"prompt": PROMPT, "w": w}, f)
 
-    # Save the initial pure noise image at T=1000
-    scaled_x_t = (x_t + 1) / 2
-    scaled_x_t = scaled_x_t.clamp(0, 1)
-    torchvision.utils.save_image(
-        scaled_x_t,
-        f"{output_dir}/sample_{TIMESTEPS}.png"
-    )
+    def save_frame(tensor, idx):
+        scaled = ((tensor + 1) / 2).clamp(0, 1)
+        path = f"{output_dir}/sample_{idx:03d}.png"
+        torchvision.utils.save_image(scaled, path)
+        return path
 
     text_encoder = ClipTextEncoder(device="cuda")
     text_embed = text_encoder.embed_text(PROMPT)
 
+    # Continuous time walked from 1 (noise) -> 0 (data) via Euler ODE steps.
+    NUM_STEPS = 20
+    ts = torch.linspace(1.0, 0.0, NUM_STEPS + 1)
+
+    frame_paths = [save_frame(x_t, 0)]      # frame 0 = the initial pure noise (t=1)
+    frame_labels = [f"t={ts[0]:.2f}"]
+
     with torch.no_grad():
-        STEP_SIZE = 50
-        for t in range(TIMESTEPS-1, -1, -STEP_SIZE):
-            t_prev = max(t - STEP_SIZE, 0)
-            x_t = constants.sample_step(model, x_t, t, t_prev, text_embed, w)
-            
-            scaled_x_t = (x_t + 1) / 2
-            scaled_x_t = scaled_x_t.clamp(0, 1)
-            torchvision.utils.save_image(
-                scaled_x_t,
-                f"{output_dir}/sample_{t_prev}.png"
-            )
+        for i in range(NUM_STEPS):
+            t = ts[i].item()
+            t_prev = ts[i + 1].item()
+            x_t = fm.sample_step(model, x_t, t, TIMESTEPS, t_prev, text_embed, w)
+
+            frame_paths.append(save_frame(x_t, i + 1))
+            frame_labels.append(f"t={t_prev:.2f}")
 
     # Left to right: noisy -> clean
-    frame_ts = [TIMESTEPS] + [max(t - STEP_SIZE, 0) for t in range(TIMESTEPS - 1, -1, -STEP_SIZE)]  
-
-    images = [
-        Image.open(f"{output_dir}/sample_{t_prev}.png").convert("RGB")
-        for t_prev in frame_ts
-    ]
+    images = [Image.open(p).convert("RGB") for p in frame_paths]
 
     fig, axes = plt.subplots(1, len(images), figsize=(len(images) * 2, 2))
 
     if len(images) == 1:
         axes = [axes]
 
-    for ax, img, t in zip(axes, images, frame_ts):
+    for ax, img, label in zip(axes, images, frame_labels):
         ax.imshow(img)
-        ax.set_title(f"t={t}", fontsize=8)
+        ax.set_title(label, fontsize=8)
         ax.axis("off")
 
     plt.tight_layout()
